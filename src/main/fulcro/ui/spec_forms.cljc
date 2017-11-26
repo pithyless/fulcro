@@ -156,27 +156,6 @@
   [ui-form]
   (= :invalid (validity ui-form)))
 
-(defn- get-in-following-idents
-  "Get the item at the given path. If an path segment is an ident, follow that to continue the get."
-  ([state-map path]
-   (let [k         (first path)
-         remainder (rest path)
-         item      (get state-map k)
-         is-ident? (util/ident? item)
-         real-item (if is-ident? (get-in state-map item) item)]
-     (if (seq remainder)
-       (get-in-following-idents state-map (rest path) real-item)
-       real-item)))
-  ([state-map path starting-item]
-   (let [k         (first path)
-         remainder (rest path)
-         item      (get starting-item k)
-         is-ident? (util/ident? item)
-         real-item (if is-ident? (get-in state-map item) item)]
-     (if (seq remainder)
-       (get-in-following-idents state-map (rest path) real-item)
-       real-item))))
-
 (defn update-forms
   "Recursively update a form and its subforms.
 
