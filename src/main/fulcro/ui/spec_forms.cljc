@@ -24,8 +24,8 @@
                           :args (s/cat :entity map? :config ::form-config)
                           :ret (s/cat :entity map? :config ::form-config)))
 
-(defsc FormConfig [this {:keys [::id ::fields ::subforms ::pristine-state]} _ _]
-  {:query [::id ::fields ::subforms ::pristine-state]
+(defsc FormConfig [this {:keys [::id ::complete? ::fields ::subforms ::pristine-state]} _ _]
+  {:query [::id ::fields ::complete? ::subforms ::pristine-state]
    :ident [::FORM-CONFIGS ::id]}
   (dom/div nil
     (dom/h4 nil "Form Config")
@@ -61,8 +61,9 @@
 
    Returns a sequence of those entities (all denormalized)."
   [entity subform-join-keys]
-  (mapcat #(let [v (get entity %)]
-             (if (sequential? v) v [v])) subform-join-keys))
+  (remove nil?
+    (mapcat #(let [v (get entity %)]
+               (if (sequential? v) v [v])) subform-join-keys)))
 
 (defn dirty?
   "Returns true if the given ui-entity-props that are configured as a form differ from the pristine version.
@@ -70,14 +71,17 @@
 
   If given a field, it only checks that field."
   ([ui-entity-props field]
+   (assert (map? (-> ui-entity-props ::form-config)) "entity is a denormalized form")
    (let [{{pristine-state ::pristine-state} ::form-config} ui-entity-props
          current  (get ui-entity-props field)
          original (get pristine-state field)]
      (not= current original)))
-  ([entity]
-   (let [{:keys [::pristine-state ::subforms ::fields]} (::form-config entity)
-         dirty-field?     (fn [k] (dirty? entity k))
-         subform-entities (immediate-subforms entity subforms)]
+  ([ui-entity-props]
+   (assert (map? (-> ui-entity-props ::form-config)) "entity is a denormalized form")
+   (let [{:keys [::pristine-state ::subforms ::fields]} (::form-config ui-entity-props)
+         dirty-field?     (fn [k] (dirty? ui-entity-props k))
+         subform-entities (immediate-subforms ui-entity-props subforms)]
+     (println :se subform-entities)
      (boolean
        (or
          (some dirty-field? fields)
@@ -156,6 +160,21 @@
   [ui-form]
   (= :invalid (validity ui-form)))
 
+(defn immediate-subform-idents
+  "Get the idents of the immediate subforms that are joined into entity by
+   subform-join-keys (works with to-one and to-many). Entity is a NORMALIZED entity from the state map.
+
+   Returns a sequence of those idents."
+  [entity subform-join-keys]
+  (remove nil?
+    (mapcat (fn immediate-subform-idents-step [k]
+             (let [v      (get entity k)
+                   result (cond
+                            (and (sequential? v) (every? util/ident? v)) v
+                            (util/ident? v) [v]
+                            :else [])]
+               result)) subform-join-keys)))
+
 (defn update-forms
   "Recursively update a form and its subforms.
 
@@ -169,7 +188,7 @@
         config         (get-in state-map config-ident)
         {:keys [::subforms]} config
         [updated-entity updated-config] (xform entity config)
-        subform-idents (map #(get-in state-map (conj starting-entity-ident %)) subforms)]
+        subform-idents (immediate-subform-idents (get-in state-map starting-entity-ident) subforms)]
     (as-> state-map sm
       (assoc-in sm starting-entity-ident updated-entity)
       (assoc-in sm config-ident updated-config)
