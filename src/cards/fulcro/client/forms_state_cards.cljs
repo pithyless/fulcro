@@ -1,6 +1,6 @@
 (ns fulcro.client.forms-state-cards
   (:require [clojure.spec.alpha :as s]
-            [devcards.core :as dc :refer [defcard-doc]]
+            [devcards.core :as dc :refer-macros [defcard-doc]]
             [fulcro.client.cards :refer [defcard-fulcro]]
             [fulcro.client.logging :as log]
             [fulcro.ui.elements :as ele]
@@ -22,39 +22,71 @@
   Forms in Fulcro 2 are a complete rewrite from the forms support in Fulcro 1 (which can still be used).
   ")
 
-(defn input-with-label
-  "A non-library helper function, written by you to help lay out your form."
-  [component field field-label validation-string]
+(declare Root PhoneForm)
+
+(defn render-field [component field renderer]
   (let [form         (prim/props component)
         entity-ident (prim/get-ident component form)
+        id           (str (first entity-ident) "-" (second entity-ident))
         is-dirty?    (f/dirty? form field)
         clean?       (not is-dirty?)
         validity     (f/validity form field)
         is-invalid?  (= :invalid validity)
         value        (get form field "")]
-    (dom/div #js {:className (str "form-group" (when is-invalid? " has-error"))}
-      (dom/label #js {:className "col-sm-2" :htmlFor field} field-label)
-      (dom/div #js {:className "col-sm-10"}
-        (dom/input #js {:value    value
-                        :onBlur   #(prim/transact! component `[(f/validate! {:entity-ident ~entity-ident
-                                                                             :field        ~field})])
-                        :onChange #(m/set-string! component field :event %)}))
-      (dom/span #js {:className (str "col-sm-offset-2 col-sm-10 " (when-not is-invalid? " hidden"))} validation-string))))
+    (renderer {:dirty?   is-dirty?
+               :ident    entity-ident
+               :id       id
+               :clean?   clean?
+               :validity validity
+               :invalid? is-invalid?
+               :value    value})))
 
-(declare Root)
+(defn input-with-label
+  "A non-library helper function, written by you to help lay out your form."
+  ([component field field-label validation-string input-element]
+   (render-field component field
+     (fn [{:keys [invalid? id dirty?]}]
+       (bs/labeled-input {:error           (when invalid? validation-string)
+                          :id              id
+                          :warning         (when dirty? "(unsaved)")
+                          :input-generator input-element} field-label))))
+  ([component field field-label validation-string]
+   (render-field component field
+     (fn [{:keys [invalid? id dirty? value invalid ident]}]
+       (bs/labeled-input {:value    value
+                          :id       id
+                          :error    (when invalid? validation-string)
+                          :warning  (when dirty? "(unsaved)")
+                          :onBlur   #(prim/transact! component `[(f/validate! {:entity-ident ~ident
+                                                                               :field        ~field})])
+                          :onChange #(m/set-string! component field :event %)} field-label)))))
 
-(s/def ::phone-number #(re-matches #"\(?[0-9]{3}\)?[0-9]{3}-?[0-9]{4}" %))
+(s/def ::phone-number #(re-matches #"\(?[0-9]{3}[-.)]? *[0-9]{3}-?[0-9]{4}" %))
 
-(defsc PhoneForm [this {:keys [:db/id ::phone-type ::phone-number] :as props} _ _]
-  {:query     [:db/id ::phone-type ::phone-number (f/get-form-query)]
+(defmutation submit-phone [{:keys [id]}]
+  (action [{:keys [state]}]
+    (swap! state f/commit-form* [:phone/by-id id])))
+
+(defsc PhoneForm [this {:keys [:db/id ::phone-type ::phone-number :ui/dropdown] :as props} _ _]
+  {:query     [:db/id ::phone-type ::phone-number {:ui/dropdown (prim/get-query bs/Dropdown)} (f/get-form-query)]
    :ident     [:phone/by-id :db/id]
-   :css       []
+   :css       [[:.modified {:color :red}]]
    :protocols [static fc/InitialAppState
                (initial-state [c {:keys [id type number]}]
-                 (f/build-form {:db/id id ::phone-type type ::phone-number number} {::f/id "phone-form" ::f/fields #{::phone-number}}))]}
+                 (f/build-form {:db/id         id
+                                :ui/dropdown   (bs/dropdown :phone-type "Type" [(bs/dropdown-item :home "Home") (bs/dropdown-item :work "Work")])
+                                ::phone-type   type
+                                ::phone-number number}
+                   {::f/id "phone-form" ::f/fields #{::phone-number ::phone-type}}))]}
   (let [{:keys [hidden]} (css/get-classnames Root)]
-    (dom/div #js {:className "form-horizontal"}
-      (input-with-label this ::phone-number "Phone:" "10-digit phone number is required."))))
+    (dom/div #js {:className "form"}
+      (input-with-label this ::phone-number "Phone:" "10-digit phone number is required.")
+      (input-with-label this ::phone-type "Type:" ""
+        (fn [attrs]
+          (bs/ui-dropdown dropdown
+            :stateful? true
+            :onSelect (fn [v] (m/set-value! this ::phone-type v)))))
+      (bs/button {:onClick #(prim/transact! this `[(submit-phone {:id ~id})])} "Commit!"))))
 
 (def ui-phone-form (prim/factory PhoneForm {:keyfn :db/id}))
 
