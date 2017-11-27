@@ -40,9 +40,9 @@
 
 (s/def ::person-name (s/and string? #(not (empty? (str/trim %)))))
 
-(specification "build-form"
+(specification "init-form"
   (let [person      {:db/id 3 ::person-name "J.B." ::person-age 49 ::phone-numbers []}
-        form        (f/build-form person {::f/id     "person-form-3"
+        form        (f/init-form person {::f/id      "person-form-3"
                                           ::f/fields #{::person-name ::person-age}})
         form-config (::f/form-config form)]
     (behavior "Lays out the given initial pristine state and config."
@@ -57,13 +57,13 @@
         "Places (in pristine-state) just the original fields from the entity state that belong in the form"
         (::f/pristine-state form-config) => (select-keys person #{::person-name ::person-age})))))
 
-(let [locale                                  (f/build-form {:db/id 22 ::country :US} {::f/id "us-locale" ::f/fields #{::country}})
+(let [locale                                  (f/init-form {:db/id 22 ::country :US} {::f/id "us-locale" ::f/fields #{::country}})
       phone-numbers                           [{:db/id 2 ::phone-number "555-1212" ::locale locale} {:db/id 3 ::phone-number "555-1212"}]
-      phone-number-forms                      (mapv #(f/build-form % {::f/id       (str "phone-form-" (:db/id %))
+      phone-number-forms                      (mapv #(f/init-form % {::f/id        (str "phone-form-" (:db/id %))
                                                                       ::f/subforms #{::locale}
                                                                       ::f/fields   #{::phone-number}}) phone-numbers)
       person                                  {:db/id 1 ::person-name "Bo" ::phone-numbers phone-number-forms}
-      person-form                             (f/build-form person {::f/id       "form-1"
+      person-form                             (f/init-form person {::f/id        "form-1"
                                                                     ::f/subforms #{::phone-numbers}
                                                                     ::f/fields   #{::person-name}})
       validated-person                        (-> person-form

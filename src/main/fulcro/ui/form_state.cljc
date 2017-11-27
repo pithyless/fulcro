@@ -41,15 +41,41 @@
   []
   {::form-config (prim/get-query FormConfig)})
 
-(defn build-form
+(defn init-form
   "Build an entity's initial state based on prisine-state and a set of keywords that designate the
   data that make up the form fields."
   [entity {:keys [::id ::fields ::subforms] :as form-config}]
-  (let [pristine-state (select-keys entity fields)]
-    (merge entity {::form-config (assoc form-config ::pristine-state pristine-state
-                                                    ::subforms (or subforms #{}))})))
+  (if (contains? entity ::form-config)
+    entity
+    (let [pristine-state (select-keys entity fields)]
+      (merge entity {::form-config (assoc form-config ::pristine-state pristine-state
+                                                      ::subforms (or subforms #{}))}))))
 
-(s/fdef build-form
+(defn init-form*
+  "Build an entity's initial state based on prisine-state and a set of keywords that designate the
+  data that make up the form fields.
+
+  state-map - The state map of your client
+  entity - The *normalized* entity from your state
+  form-config - The form configuration parameters
+
+  You will need to run this against any entities that are in the (nested) form.
+
+  Returns an updated state map with normalized form configuration in place for that entity.
+  "
+  [state-map entity-ident {:keys [::id ::fields ::subforms] :as form-config}]
+  (let [normalized-entity (get-in state-map entity-ident)
+        pristine-state    (select-keys normalized-entity fields)
+        form-config       (assoc form-config ::pristine-state pristine-state
+                                             ::subforms (or subforms #{}))
+        config-ident      [::FORM-CONFIGS id]]
+    (if (contains? normalized-entity ::form-config)
+      state-map
+      (-> state-map
+        (assoc-in (conj entity-ident ::form-config) config-ident)
+        (assoc-in config-ident form-config)))))
+
+(s/fdef init-form
   :args (s/cat :entity map? :config ::form-config)
   :ret (s/keys :req [::form-config]))
 
@@ -63,19 +89,23 @@
     (mapcat #(let [v (get entity %)]
                (if (sequential? v) v [v])) subform-join-keys)))
 
+(defn assume [cond message]
+  (when-not cond
+    (log/warn message)))
+
 (defn dirty?
   "Returns true if the given ui-entity-props that are configured as a form differ from the pristine version.
   Recursively follows subforms if given no field. Returns true if anything doesn't match up.
 
   If given a field, it only checks that field."
   ([ui-entity-props field]
-   (assert (map? (-> ui-entity-props ::form-config)) "entity is a denormalized form")
+   (assume (map? (-> ui-entity-props ::form-config)) "entity is a denormalized form")
    (let [{{pristine-state ::pristine-state} ::form-config} ui-entity-props
          current  (get ui-entity-props field)
          original (get pristine-state field)]
      (not= current original)))
   ([ui-entity-props]
-   (assert (map? (-> ui-entity-props ::form-config)) "entity is a denormalized form")
+   (assume (map? (-> ui-entity-props ::form-config)) "entity is a denormalized form")
    (let [{:keys [::pristine-state ::subforms ::fields]} (::form-config ui-entity-props)
          dirty-field?     (fn [k] (dirty? ui-entity-props k))
          subform-entities (immediate-subforms ui-entity-props subforms)]
@@ -165,12 +195,12 @@
   [entity subform-join-keys]
   (remove nil?
     (mapcat (fn immediate-subform-idents-step [k]
-             (let [v      (get entity k)
-                   result (cond
-                            (and (sequential? v) (every? util/ident? v)) v
-                            (util/ident? v) [v]
-                            :else [])]
-               result)) subform-join-keys)))
+              (let [v      (get entity k)
+                    result (cond
+                             (and (sequential? v) (every? util/ident? v)) v
+                             (util/ident? v) [v]
+                             :else [])]
+                result)) subform-join-keys)))
 
 (defn update-forms
   "Recursively update a form and its subforms.
@@ -190,12 +220,31 @@
       (assoc-in sm starting-entity-ident updated-entity)
       (assoc-in sm config-ident updated-config)
       (reduce (fn [s id]
-                (assert (util/ident? id) "Subform component is normalized")
+                (assume (util/ident? id) "Subform component is normalized")
                 (update-forms s xform id)) sm subform-idents))))
 
 (s/fdef update-forms
   :args (s/cat :state map? :xform ::form-operation :ident util/ident?)
   :ret map?)
+
+(defn dirty-fields
+  "Obtains all of the dirty fields for the given ui-entity, recursively. You'll need to cache those within a mutation so
+  if you need to submit the on the wire (if the optimistic update will commit them to state)
+
+  ui-entity - The entity (denormalized) from the UI
+  as-delta? - If false, returns the entity graph with just the modified items. When true, each value will be a map with :before and :after keys
+  (useful for optimistic transaction semantics)"
+  [ui-entity as-delta?]
+  (let [{:keys [::fields ::pristine-state] :as config} (get ui-entity ::form-config)
+        delta (into {} (keep (fn [k]
+                               (let [before (get pristine-state k)
+                                     after  (get ui-entity k)]
+                                 (if (not= before after)
+                                   (if as-delta?
+                                     [k {:before before :after after}]
+                                     [k after])
+                                   nil))) fields))]
+    delta))
 
 (defn validate*
   "Mark the fields complete so that validation checks will return values. Follows the subforms recursively through state,
@@ -209,7 +258,7 @@
                               form-config-path))
          legal-fields     (get-in state-map (conj form-config-path ::fields) #{})
          complete-path    (conj form-config-path ::complete?)]
-     (assert (legal-fields field) "Validating a declared field")
+     (assume (legal-fields field) "Validating a declared field")
      (update-in state-map complete-path (fnil conj #{}) field)))
   ([state-map entity-ident]
    (update-forms state-map

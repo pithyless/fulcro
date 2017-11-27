@@ -6,7 +6,8 @@
             [fulcro.ui.html-entities :as ent]
             [fulcro.i18n :refer [tr tr-unsafe]]
             [fulcro.client.mutations :as m :refer [defmutation]]
-    #?(:clj [clojure.future :refer :all])
+    #?(:clj
+            [clojure.future :refer :all])
             [clojure.string :as str]
             [clojure.set :as set]
             [fulcro.client.core :as fc]
@@ -224,6 +225,9 @@
         attrs        (assoc attrs :type "button" :aria-label "Close" :className classes)]
     (dom/button (clj->js attrs)
       (dom/span #js {:aria-hidden true} "\u00D7"))))
+
+(defn controlled-dropdown [props]
+  )
 
 (defn img
   "Render an img tag with bootstrap classes.
@@ -495,6 +499,8 @@
     (swap! state update dropdown-table close-all-dropdowns-impl)))
 
 (defui ^:once DropdownItem
+  static fc/InitialAppState
+  (initial-state [c {:keys [id label]}] (dropdown-item id label))
   static prim/IQuery
   (query [this] [::id ::label ::active? ::disabled? :type])
   static prim/Ident
@@ -526,6 +532,8 @@
     (ui-dropdown-item-factory (prim/computed props {:onSelect onSelect :active? active?}))))
 
 (defui ^:once Dropdown
+  static fc/InitialAppState
+  (initial-state [c {:keys [id label items]}] (dropdown id label items))
   static prim/IQuery
   (query [this] [::id ::active-item ::label ::open? {::items (prim/get-query DropdownItem)} :type])
   static prim/Ident
@@ -533,9 +541,10 @@
   Object
   (render [this]
     (let [{:keys [::id ::label ::active-item ::items ::open?]} (prim/props this)
-          {:keys [onSelect kind stateful?]} (prim/get-computed this)
+          {:keys [onSelect kind value stateful?]} (prim/get-computed this)
+          selection         (or value active-item)
           active-item-label (->> items
-                              (some #(and (= active-item (::id %)) %))
+                              (some #(and (= selection (::id %)) %))
                               ::label)
           label             (if (and active-item-label stateful?) active-item-label label)
           onSelect          (fn [item-id]
@@ -550,7 +559,7 @@
                               kind (str " btn-" (name kind))) :aria-haspopup true :aria-expanded open? :onClick open-menu}
           (tr-unsafe label) " " (dom/span #js {:className "caret"}))
         (dom/ul #js {:className "dropdown-menu"}
-          (map #(ui-dropdown-item % :onSelect onSelect :active? (and stateful? (= (::id %) active-item))) items))))))
+          (map #(ui-dropdown-item % :onSelect onSelect :active? (and stateful? (= (::id %) selection))) items))))))
 
 (let [ui-dropdown-factory (prim/factory Dropdown {:keyfn ::id})]
   (defn ui-dropdown
@@ -559,6 +568,7 @@
 
     onSelect - The function to call when a menu item is selected
     stateful? - If set to true, the dropdown will remember the selection and show it.
+    value - If set, turns this into a controlled component.
     kind - The kind of dropdown. See `button`."
     [props & {:keys [onSelect kind stateful?] :as attrs}]
     (ui-dropdown-factory (prim/computed props attrs))))
