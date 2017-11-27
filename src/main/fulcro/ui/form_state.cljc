@@ -1,8 +1,7 @@
-(ns fulcro.ui.spec-forms
+(ns fulcro.ui.form-state
   (:require [clojure.spec.alpha :as s]
     #?(:clj
             [clojure.future :refer :all])
-            [devcards.core :as dc :refer [defcard-doc]]
             [fulcro.client.logging :as log]
             [fulcro.client.mutations :as m :refer [defmutation]]
             [fulcro.client.core :as fc]
@@ -54,7 +53,6 @@
   :args (s/cat :entity map? :config ::form-config)
   :ret (s/keys :req [::form-config]))
 
-
 (defn immediate-subforms
   "Get the instances of the immediate subforms that are joined into entity by
    subform-join-keys (works with to-one and to-many). Entity is a denormalized (UI) entity.
@@ -81,7 +79,6 @@
    (let [{:keys [::pristine-state ::subforms ::fields]} (::form-config ui-entity-props)
          dirty-field?     (fn [k] (dirty? ui-entity-props k))
          subform-entities (immediate-subforms ui-entity-props subforms)]
-     (println :se subform-entities)
      (boolean
        (or
          (some dirty-field? fields)
@@ -89,7 +86,7 @@
 
 (s/def dirty? ::field-tester)
 
-(defn unspeced-or-valid?
+(defn no-spec-or-valid?
   "Returns true if the value is valid, or there is no spec for it."
   [spec-key value]
   (or (not (s/get-spec spec-key))
@@ -128,7 +125,7 @@
          complete? (or complete? #{})]
      (cond
        (not (complete? field)) :unchecked
-       (not (unspeced-or-valid? field (get ui-entity-props field))) :invalid
+       (not (no-spec-or-valid? field (get ui-entity-props field))) :invalid
        :else :valid)))
   ([ui-entity-props]
    (let [{{:keys [::fields ::subforms ::complete?]} ::form-config} ui-entity-props

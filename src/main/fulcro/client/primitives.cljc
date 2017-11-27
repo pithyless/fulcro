@@ -142,6 +142,7 @@
        (fn [[name [this :as args] & body]]
          `(~name [this#]
             (let [~this this#
+                  reconciler# (fulcro.client.primitives/get-reconciler this#)
                   indexer# (get-in reconciler# [:config :indexer])]
               (when-not (nil? indexer#)
                 (fulcro.client.impl.protocols/index-component! indexer# this#))

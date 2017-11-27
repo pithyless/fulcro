@@ -12,6 +12,7 @@
     fulcro.client.util-spec
     fulcro.history-spec
     fulcro.ui.forms-spec
+    fulcro.ui.form-state-spec
     fulcro.server-render-spec
     fulcro.i18n-spec))
 

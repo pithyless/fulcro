@@ -1,4 +1,4 @@
-(ns fulcro.ui.spec-forms-spec
+(ns fulcro.ui.form-state-spec
   (:require
     #?(:clj [taoensso.timbre :as timbre])
             [fulcro.client.primitives :as prim :refer [defui]]
@@ -10,7 +10,7 @@
             [fulcro.client.mutations :as m]
             [fulcro.client.util :as uu]
             [fulcro.client.data-fetch :as df]
-            [fulcro.ui.spec-forms :as f]))
+            [fulcro.ui.form-state :as f]))
 
 (defui Locale
   static prim/IQuery
