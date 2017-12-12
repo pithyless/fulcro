@@ -4,6 +4,7 @@
     [clojure.walk :refer [walk prewalk]]
     [fulcro.client.primitives :as prim]
     [fulcro.client.impl.data-fetch :as impl]
+    [fulcro.client.impl.data-targeting :as targeting]
     [fulcro.client.mutations :refer [mutate defmutation]]
     [fulcro.client.logging :as log]
     [fulcro.client.dom :as dom]
@@ -22,16 +23,16 @@
   impl/marker-table)
 
 (defn multiple-targets [& targets]
-  (with-meta (vec targets) {::impl/multiple-targets true}))
+  (with-meta (vec targets) {::targeting/multiple-targets true}))
 
 (defn prepend-to [target]
-  (with-meta target {::impl/prepend-target true}))
+  (with-meta target {::targeting/prepend-target true}))
 
 (defn append-to [target]
-  (with-meta target {::impl/append-target true}))
+  (with-meta target {::targeting/append-target true}))
 
 (defn replace-at [target]
-  (with-meta target {::impl/replace-target true}))
+  (with-meta target {::targeting/replace-target true}))
 
 (defn- computed-refresh
   "Computes the refresh for the load by ensuring the loaded data is on the
@@ -47,7 +48,7 @@
                             (vector? t) (conj r (first t))
                             :else (conj r t)))]
          (cond
-           (impl/multiple-targets? target) (reduce (fn [refresh t] (add-target refresh t)) result target)
+           (targeting/multiple-targets? target) (reduce (fn [refresh t] (add-target refresh t)) result target)
            target (add-target result target)
            :else result))))
 
