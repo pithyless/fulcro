@@ -15,13 +15,13 @@
   What we'd like to see then from the server is a return value with the shape of the query:
 
   ```
-  { :all-frields [ {:db/id 1 ...} {:db/id 2 ...} ...] }
+  { :all-friends [ {:db/id 1 ...} {:db/id 2 ...} ...] }
   ```
 
   If we combine that query with that tree result and were to manually call `merge!` we'd end up with this:
 
   ```
-  { :all-frields [ [:person/by-id 1] [:person/by-id 2] ...]
+  { :all-friends [ [:person/by-id 1] [:person/by-id 2] ...]
     :person/by-id { 1 { :db/id 1 ...}
                     2 { :db/id 2 ...}
                     ...}}
@@ -107,7 +107,7 @@
   a to-one edge is an ident, and a to-many edge is a vector of idents):
 
   ```
-  { :all-frields [ [:person/by-id 1] [:person/by-id 2] ...]  ; (1) MOVE this to (2)
+  { :all-friends [ [:person/by-id 1] [:person/by-id 2] ...]  ; (1) MOVE this to (2)
     :person/by-id { 1 { :db/id 1 ...}
                     2 { :db/id 2 ...}
     :current-screen [:screens/by-type :friends]
